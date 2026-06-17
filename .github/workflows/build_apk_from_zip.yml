@@ -1,0 +1,59 @@
+name: Build Hamsoog APK From Zip
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Unzip project
+        run: |
+          ZIP_FILE="$(ls *.zip | head -n 1)"
+          echo "Using zip: $ZIP_FILE"
+          unzip -q "$ZIP_FILE"
+
+      - name: Locate Flutter project
+        run: |
+          PROJECT_DIR="$(dirname "$(find . -name pubspec.yaml | head -n 1)")"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Project directory: $PROJECT_DIR"
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create Android files
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: flutter create --org com.hamsoog --platforms=android .
+
+      - name: Set Persian app name
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          if [ -f scripts/set_android_app_name.py ]; then
+            python3 scripts/set_android_app_name.py
+          else
+            echo "No app name script found, continuing..."
+          fi
+
+      - name: Get packages
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: flutter build apk --debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: hamsoog-app-debug-apk
+          path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-debug.apk
